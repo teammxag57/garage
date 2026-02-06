@@ -12,9 +12,9 @@ export default async function handler(req, res) {
     }
 
     // App Proxy security
-    if (!verifyAppProxySignature(req.query)) {
-      return res.status(401).json({ error: "Invalid proxy signature" });
-    }
+if (req.query.signature && !verifyAppProxySignature(req.query)) {
+  return res.status(401).json({ error: "Invalid proxy signature" });
+}
 
     const shop = req.query.shop;
     const customerId = req.query.logged_in_customer_id;
@@ -36,8 +36,8 @@ export default async function handler(req, res) {
     const isFavorite = updated.includes(collectionGid);
 
     return res.json({ success: true, favorites: updated, isFavorite });
-  } catch (err) {
-    console.error("TOGGLE ERROR:", err);
-    return res.status(500).json({ error: "Server error" });
-  }
+} catch (err) {
+  console.error("TOGGLE ERROR:", err);
+  return res.status(500).json({ error: "Server error", detail: String(err?.message || err) });
+}
 }
