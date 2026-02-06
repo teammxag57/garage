@@ -1,19 +1,36 @@
-import { getFavorites, verifyAppProxySignature } from "../../lib/shopify.js";
+import { getShopToken } from "../../lib/sessions.js";
+import { shopifyGraphQL } from "../../lib/shopify.js";
 
 export default async function handler(req, res) {
   try {
-    // (Opcional) valida assinatura do App Proxy
-    if (!verifyAppProxySignature(req.query)) {
-      return res.status(401).json({ error: "Invalid proxy signature" });
-    }
-
+    const shop = req.query.shop;
     const customerId = req.query.logged_in_customer_id;
-    if (!customerId) return res.status(400).json({ error: "Missing customerId" });
+    if (!shop || !customerId) return res.status(400).json({ error: "Missing shop/customerId" });
 
-    const favorites = await getFavorites(customerId);
+    const token = await getShopToken(shop);
+    if (!token) return res.status(401).json({ error: "Shop not installed (missing token). Run /api/auth?shop=..." });
+
+    const q = `
+      query($id: ID!) {
+        customer(id: $id) {
+          metafield(namespace: "custom", key: "garagem") { value }
+        }
+      }
+    `;
+
+    const data = await shopifyGraphQL(
+      shop,
+      token,
+      q,
+      { id: `gid://shopify/Customer/${customerId}` }
+    );
+
+    const value = data.customer?.metafield?.value;
+    const favorites = value ? JSON.parse(value) : [];
+
     return res.json({ success: true, favorites });
-  } catch (err) {
-    console.error(err);
+  } catch (e) {
+    console.error(e);
     return res.status(500).json({ error: "Server error" });
   }
 }
