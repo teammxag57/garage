@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "rewrites": [
+    { "source": "/", "destination": "/api" },
+
+    { "source": "/apps/garagem/:path*", "destination": "/api/apps/garagem/:path*" },
+    { "source": "/garagem/:path*", "destination": "/api/garagem/:path*" }
+  ]
+}
+
