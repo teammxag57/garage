@@ -1,22 +1,28 @@
+// /api/list.js
 import crypto from "crypto";
 import { getShopToken } from "../../lib/sessions.js";
 import { shopifyGraphQL } from "../../lib/shopify.js";
 
+/**
+ * Verifica a assinatura do App Proxy.
+ * Shopify assina todos os params (exceto `signature`) concatenados,
+ * por ordem alfabética, no formato key=value (sem &), com HMAC-SHA256.
+ */
 function verifyAppProxySignature(query, secret) {
-  // App Proxy costuma enviar `signature`
   const signature = query.signature;
   if (!signature) return false;
 
-  // cria mensagem com TODOS os params exceto signature
   const msg = Object.keys(query)
     .filter((k) => k !== "signature")
     .sort()
-    .map((k) => `${k}=${Array.isArray(query[k]) ? query[k][0] : query[k]}`)
+    .map((k) => {
+      const v = Array.isArray(query[k]) ? query[k][0] : query[k];
+      return `${k}=${v}`;
+    })
     .join("");
 
   const digest = crypto.createHmac("sha256", secret).update(msg).digest("hex");
 
-  // timing-safe compare
   try {
     return crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(signature));
   } catch {
@@ -26,29 +32,39 @@ function verifyAppProxySignature(query, secret) {
 
 export default async function handler(req, res) {
   try {
-    // Vercel preenche req.query, mas fazemos fallback só para garantir
+    if (req.method !== "GET") {
+      return res.status(405).json({ error: "Method not allowed" });
+    }
+
+    // Anti-cache (evita “piscar”/estado errado após refresh)
+    res.setHeader("Cache-Control", "no-store");
+
+    // Normaliza query (Vercel/Next) + fallback
     const url = new URL(req.url, `https://${req.headers.host}`);
     const query = req.query ?? Object.fromEntries(url.searchParams.entries());
 
-    const shop =
+    const shop = String(
       query.shop ||
-      req.headers["x-shopify-shop-domain"] ||
-      req.headers["x-shopify-shop"]; // fallback
+        req.headers["x-shopify-shop-domain"] ||
+        req.headers["x-shopify-shop"] ||
+        ""
+    ).trim();
 
-    const customerId =
+    const customerId = String(
       query.logged_in_customer_id ||
-      query.customerId || // opcional (para testes)
-      url.searchParams.get("logged_in_customer_id") ||
-      url.searchParams.get("customerId");
+        query.customerId || // opcional (testes)
+        url.searchParams.get("logged_in_customer_id") ||
+        url.searchParams.get("customerId") ||
+        ""
+    ).trim();
 
     if (!shop || !customerId) {
       return res.status(400).json({ error: "Missing shop/customerId" });
     }
 
-    // (Recomendado) Valida chamada App Proxy
-    // Se isto NÃO for App Proxy, podes comentar este bloco.
+    // Validação App Proxy (recomendado em produção)
     const secret = process.env.SHOPIFY_API_SECRET;
-    if (secret) {
+    if (secret && query.signature) {
       const ok = verifyAppProxySignature(query, secret);
       if (!ok) return res.status(401).json({ error: "Invalid proxy signature" });
     }
@@ -60,6 +76,7 @@ export default async function handler(req, res) {
       });
     }
 
+    // Lê SEMPRE o mesmo metafield que o toggle deve usar: custom.garagem
     const q = `
       query($id: ID!) {
         customer(id: $id) {
@@ -72,8 +89,23 @@ export default async function handler(req, res) {
       id: `gid://shopify/Customer/${customerId}`,
     });
 
-    const value = data?.customer?.metafield?.value;
-    const favorites = value ? JSON.parse(value) : [];
+    const rawValue = data?.customer?.metafield?.value;
+
+    // Robustez: se não for JSON válido, devolve vazio
+    let favorites = [];
+    if (rawValue) {
+      try {
+        const parsed = JSON.parse(rawValue);
+        favorites = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        favorites = [];
+      }
+    }
+
+    // Normaliza para strings trimmed (evita includes falhar por espaços/tipos)
+    favorites = favorites
+      .map((x) => String(x).trim())
+      .filter(Boolean);
 
     return res.json({ success: true, favorites });
   } catch (e) {
