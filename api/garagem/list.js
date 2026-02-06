@@ -30,7 +30,10 @@ export default async function handler(req, res) {
 
     return res.json({ success: true, favorites });
   } catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: "Server error" });
-  }
+  console.error("LIST ERROR:", e);
+  return res.status(500).json({
+    error: "Server error",
+    detail: String(e?.stack || e?.message || e),
+  });
+}
 }
