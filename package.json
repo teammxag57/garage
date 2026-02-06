@@ -1,5 +1,5 @@
 {
-  "name": "Shopify-Jasmin-App",
+  "name": "Garage",
   "version": "1.0.0",
   "lockfileVersion": 3,
   "requires": true,
@@ -8,7 +8,8 @@
   "packages": {},
   "scripts": {
     "dev": "node server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^7.3.0",
