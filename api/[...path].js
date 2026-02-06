@@ -6,7 +6,9 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Se a tua rota atual é /toggle e /list dentro do router:
 app.use("/garagem", garagemRouter);
 
-export default app;
+// Catch-all handler para o Vercel
+export default function handler(req, res) {
+  return app(req, res);
+}
