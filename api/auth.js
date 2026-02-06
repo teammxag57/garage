@@ -1,13 +1,14 @@
 import crypto from "crypto";
-import { buildAuthUrl, verifyHmacFromQuery } from "../lib/shopify.js";
+import { buildAuthUrl } from "../lib/shopify.js";
 import { createOAuthState } from "../lib/sessions.js";
 
 export default async function handler(req, res) {
   try {
     const shop = req.query.shop;
     if (!shop) return res.status(400).send("Missing shop");
-    if (!verifyHmacFromQuery(req.query)) return res.status(401).send("Invalid hmac");
 
+    // ✅ NÃO validar HMAC aqui.
+    // O kickoff (/api/auth) só precisa do shop e de criar state.
     const state = crypto.randomBytes(16).toString("hex");
     await createOAuthState(shop, state);
 
